@@ -80,7 +80,8 @@ def _generate_all_nontrivial_EPM_bigraphs(n_q: int, n_a: int):
                 for r in subset:
                     deg_R[r] += 1
             # non‑triviality: every right vertex must be touched
-            if any(d == 0 for d in deg_R):
+            #if any(d <= 1 for d in deg_R): # and have degree 2
+            if any(d <= 0 for d in deg_R):
                 continue
 
             # Build the graph
