@@ -54,7 +54,7 @@ def _is_coloured_isomorphic(G1: nx.Graph, G2: nx.Graph) -> bool:
 # --------------------------------------------------------------------------- #
 #  Generator for *all* non-trivial EPM graphs (no iso-filtering)
 # --------------------------------------------------------------------------- #
-def _generate_all_nontrivial_EPM_bigraphs(n_q: int, n_a: int):
+def _generate_all_nontrivial_EPM_bigraphs(n_q: int, n_a: int, R_min: int=2):
     R_size = n_q + n_a
     Q_nodes = [f"Q{i}" for i in range(n_q)]
     A_nodes = [f"A{j}" for j in range(n_a)]
@@ -80,8 +80,7 @@ def _generate_all_nontrivial_EPM_bigraphs(n_q: int, n_a: int):
                 for r in subset:
                     deg_R[r] += 1
             # non-triviality: every right vertex must be touched
-            #if any(d <= 1 for d in deg_R): # and have degree 2
-            if any(d <= 0 for d in deg_R):
+            if any(d < R_min for d in deg_R):
                 continue
 
             # Build the graph
