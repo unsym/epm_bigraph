@@ -1,0 +1,5 @@
+
+# --- Auto-appended by bootstrap_envs.py ---
+networkx
+igraph
+psutil
