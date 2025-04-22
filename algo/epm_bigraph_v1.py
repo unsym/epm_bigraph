@@ -20,7 +20,7 @@ Each returned graph has
     • bipartition (Q union A) | R
     • qubit degree == 2
     • auxiliary degree ≥ 2
-    • right-side degree ≥ 1   (=> “non-trivial”)
+    • right-side degree ≥ 2   (=> “non-trivial”)
 The list contains exactly one representative from every colour-preserving
 isomorphism class.
 """
