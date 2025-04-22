@@ -1,34 +1,12 @@
 """
-unique_nontrivial_EPM_bigraph.py
-------------------------------
-
-Enumerate all non-trivial EPM graphs (up to colour-preserving isomorphism)
-for given parameters (n_q, n_a) using the igraph library for performance.
-
-Requirements
-------------
-- Python 3.10+
-- igraph (`pip install python-igraph`)
-- numpy (`pip install numpy`)
-
-Interface
----------
-unique_nontrivial_EPM_bigraph(n_q: int, n_a: int) -> list[igraph.Graph]
-
-Each returned graph has:
-    • node attribute 'type' in {'Q', 'A', 'R'}
-    • bipartition (Q union A) | R
-    • qubit degree == 2
-    • auxiliary degree >= 2
-    • right-side degree >= 2 (non-trivial criteria)
-The list contains exactly one representative from every colour-preserving
-isomorphism class *and* whose derived directed EPM graph is a single
-strongly connected component (non-trivial criteria).
+Enumerate all unique non-trivial EPM bipartite graphs (up to color-preserving isomorphism)
+for given parameters (n_q, n_a), using the igraph library for performance.
 """
 
 from itertools import combinations, product
 import numpy as np
 import igraph as ig
+
 
 def EPM_digraph_from_EPM_bipartite_graph_igraph(B: ig.Graph) -> ig.Graph:
     """
@@ -154,17 +132,17 @@ class EPMBigraphEnumerator:
     Enumerator for non-trivial Extended Projective Measurement (EPM) bipartite graphs.
 
     This class generates undirected bipartite graphs with the following properties:
-      • The vertex set is partitioned into qubit (Q), ancilla (A), and right-side (R) nodes.
-      • Each Q node is connected to exactly 2 R nodes.
-      • Each A node is connected to ≥2 R nodes.
-      • Each R node must be connected to ≥ R_min neighbors (default: 2).
-      • Graphs are filtered up to color-preserving isomorphism using canonical labeling.
-      • Optionally, only graphs whose derived directed EPM graph is strongly connected
+      * The vertex set is partitioned into qubit (Q), ancilla (A), and right-side (R) nodes.
+      * The bipartition are between (Q union A) and R.
+      * Each Q node is connected to exactly 2 R-nodes.
+      * Each A node is connected to ≥2 R nodes.
+      * Each R node must be connected to ≥ R_min neighbors (default: 2).
+      * Graphs are filtered up to color-preserving isomorphism using canonical labeling.
+      * By default, only graphs whose derived directed EPM graph is strongly connected
         are retained (controlled by `strongly_connected_only`).
 
     The resulting graphs are useful in quantum information contexts such as
-    optical graph states, measurement-based quantum computation (MBQC), and
-    variational architectures where the structure of bipartite entanglement is critical.
+    optical graph states, and measurement-based quantum computation.
 
     Parameters
     ----------
@@ -200,19 +178,6 @@ class EPMBigraphEnumerator:
     """
 
     def __init__(self, R_min: int = 2, strongly_connected_only: bool = True):
-        """
-        Parameters
-        ----------
-        R_min : int, default=2
-            Minimum degree required on each right-side node (R node, sculpting nodes).
-            This ensures that each generated EPM bipartite graph is non-trivial on the R-side.
-
-        strongly_connected_only : bool, default=True
-            Whether to filter the output to include only graphs whose derived
-            directed EPM digraph is a single strongly connected component (SCC).
-            When True, each returned graph satisfies the SCC condition after
-            conversion via EPM_digraph_from_EPM_bipartite_graph_igraph().
-        """
         self.R_min = R_min
         self.strongly_connected_only = strongly_connected_only
         self.node_colors = None     # colors/types/categories are the same thing, for different purpose
@@ -224,56 +189,30 @@ class EPMBigraphEnumerator:
         """
         Computes a canonical signature for a graph based on vertex color and
         sorted edge structure. Used to identify unique graphs up to 
-        color-preserving isomorphism.
-
-        Parameters
-        ----------
-        g : igraph.Graph
-            The input undirected EPM bipartite graph.
-
-        Returns
-        -------
-        tuple
-            A tuple of sorted edges in the canonical vertex order, used as a
-            hashable key to detect isomorphic graphs.
+        color-preserving isomorphism. The return is a tuple of sorted edges
+        in the canonical vertex order, used as a hashable key to detect isomorphic graphs.
         """
-        # Compute canonical permutation using vertex colors
         perm = g.canonical_permutation(color=self.node_colors)
-        # Apply permutation to normalize vertex order
         gc = g.permute_vertices(perm)
-        # Create a signature from the sorted edge list
         edges = sorted(gc.get_edgelist())
         return tuple(edges)
 
 
     def _generate_all_EPM_bigraphs(self, n_q: int, n_a: int):
         """
-        Generator for all EPM bipartite graphs.
+        Generator for all EPM bipartite graphs. The yield is an undirected bipartite graph
+        with the following degree constraints, but without isomorphism filtering or SCC filtering.
 
         Each graph has:
-        - n_q “qubit” nodes of degree exactly 2
-        - n_a “ancilla” nodes of degree >= 2
-        - n_r = n_q + n_a “R” nodes, each with degree >= self.R_min
+        * n_q “qubit” nodes of degree exactly 2
+        * n_a “ancilla” nodes of degree >= 2
+        * n_r = n_q + n_a “R” nodes, each with degree >= self.R_min
 
         Nodes are ordered:
         0..n_q-1           : qubit nodes
         n_q..n_q+n_a-1     : ancilla nodes
         n_q+n_a..n_q+n_a+n_r-1 : R nodes
-
-        Parameters
-        ----------
-        n_q : int
-            Number of qubit (Q) vertices, each connects to exactly two R nodes.
-        n_a : int
-            Number of ancilla (A) vertices, each connects to at least two R nodes.
-
-        Yields
-        ------
-        igraph.Graph
-            An undirected bipartite graph with the above degree constraints, but
-            without isomorphism filtering or SCC filtering.
         """
-        
         n_r = n_q + n_a     # total # of R-side nodes
         total_vertices = n_q + n_a + n_r    # total vertices = Q + A + R
         # index ranges for each part
@@ -324,7 +263,7 @@ class EPMBigraphEnumerator:
                 yield g
 
 
-    def enumerate(self, n_q: int, n_a: int) -> dict[tuple, ig.Graph]:
+    def enumerate_structural(self, n_q: int, n_a: int) -> dict[tuple, ig.Graph]:
         """
         Enumerate unique non-trivial EPM bipartite graphs for given (n_q, n_a).
 
@@ -368,14 +307,21 @@ class EPMBigraphEnumerator:
         return final_reps
 
 
+    def enumerate_colored(self, n_q: int, n_a: int) -> dict[tuple, ig.Graph]:
+        """ TODO: implement the enumeration with colored/weighted edges """
+        pass
+
+
 # --------------------------------------------------------------------------- #
 #  Minimal demo (delete or comment out in production)
 # --------------------------------------------------------------------------- #
 if __name__ == "__main__":
     enumerator = EPMBigraphEnumerator()
-    demo_graphs = enumerator.enumerate(3, 2)
-    print(f"n_q=3, n_a=2  →  found {len(demo_graphs)} unique non-trivial EPM bigraphs")
-    for idx, g in enumerate(demo_graphs, 1):
-        print(f"Graph {idx}: types={g.vs['type']}")
+    n_q, n_a = 3, 2
+    demo_graphs = enumerator.enumerate_structural(n_q, n_a)
+    print(f"n_q={n_q}, n_a={n_a}  →  found {len(demo_graphs)} unique non-trivial EPM bigraphs")
+    for (idx,(h, g)) in enumerate(demo_graphs.items()):
+        #print(f"Graph {idx}: types={g.vs['type']}")
+        print(f"Graph {idx}")
         print(f"  edges={g.get_edgelist()}")
         print()
