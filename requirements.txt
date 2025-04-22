@@ -2,3 +2,4 @@
 # --- Auto-appended by bootstrap_envs.py ---
 networkx
 psutil
+numpy
