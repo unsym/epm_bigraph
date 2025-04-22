@@ -189,6 +189,7 @@ class EPMBigraphEnumerator:
         self.n_q = None
         self.n_a = None
         self.Gs = None
+        self.num_epm_bigraph_enumerated = 0
 
 
     def _attach_node_metadata(self, graphs: list[ig.Graph], attributes: list[str]) -> list[ig.Graph]:
@@ -277,6 +278,7 @@ class EPMBigraphEnumerator:
         ]  # Number of edge (or neighbors) >= 2 for ancilla nodes
 
         # Enumerate every choice of R‐neighbors for Q and A nodes
+        self.num_epm_bigraph_enumerated = 0
         for Q_choice in product(two_subsets, repeat=n_q):
             for A_choice in product(ancilla_subsets, repeat=n_a):
                 # count degrees on R‐side
@@ -304,6 +306,7 @@ class EPMBigraphEnumerator:
                     for r in anbrs:
                         edges.append((j, r))
                 g.add_edges(edges)
+                self.num_epm_bigraph_enumerated += 1
                 yield g
 
 

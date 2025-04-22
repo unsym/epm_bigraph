@@ -25,6 +25,8 @@ def profile_epm(n_q, n_a):
     print(f"  → Time elapsed:     {t1 - t0:.3f} sec")
     print(f"  → Peak memory:      {peak_mem_mb:.2f} MB")
     print(f"  → Unique graphs:    {len(graphs)}")
+    print(f"  → EPM graphs eval:  {enumerator.num_epm_bigraph_enumerated}")
+    print(f"  → Unique ratio:     {len(graphs)/enumerator.num_epm_bigraph_enumerated}")
     print("")
 
 if __name__ == "__main__":
