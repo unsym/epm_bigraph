@@ -30,7 +30,7 @@ from igraph import Graph
 # --------------------------------------------------------------------------- #
 #  Helper ­- Canonical signature using igraph canonical_permutation
 # --------------------------------------------------------------------------- #
-def _canonical_signature(g: Graph) -> str:
+def _canonical_signature(g: Graph) -> tuple:
     # Map types to colours for canonicalization
     color_map = {'Q': 0, 'A': 1, 'R': 2}
     vertex_colors = [color_map[t] for t in g.vs['type']]
