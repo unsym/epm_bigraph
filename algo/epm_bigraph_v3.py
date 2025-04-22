@@ -180,9 +180,50 @@ class EPMBigraphEnumerator:
     def __init__(self, R_min: int = 2, strongly_connected_only: bool = True):
         self.R_min = R_min
         self.strongly_connected_only = strongly_connected_only
+        self.node_ids = None        # id of the node, from 0 to #-1
+        self.node_names = None      # name of the node
+        self.node_bipartites = None # which partition the node belong to
         self.node_colors = None     # colors/types/categories are the same thing, for different purpose
         self.node_types = None
         self.node_categories = None
+        self.n_q = None
+        self.n_a = None
+        self.Gs = None
+
+
+    def _attach_node_metadata(self, graphs: list[ig.Graph], attributes: list[str]) -> list[ig.Graph]:
+        """
+        Attach selected node attributes to each graph in the list.
+
+        Parameters
+        ----------
+        graphs : list[igraph.Graph]
+            List of igraph graph objects to be modified in-place.
+        
+        attributes : list[str]
+            List of attributes to attach. Valid options include:
+                "id", "name", "category", "bipartite", "type", "color"
+
+        Returns
+        -------
+        list[igraph.Graph]
+            The same list of graphs with node attributes attached.
+        """
+        for g in graphs:
+            n = g.vcount()
+            if "id" in attributes:
+                g.vs["id"] = self.node_ids[:n]
+            if "name" in attributes:
+                g.vs["name"] = self.node_names[:n]
+            if "category" in attributes:
+                g.vs["category"] = self.node_categories[:n]
+            if "bipartite" in attributes:
+                g.vs["bipartite"] = self.node_bipartites[:n]
+            if "type" in attributes:
+                g.vs["type"] = self.node_types[:n]
+            if "color" in attributes:
+                g.vs["color"] = self.node_colors[:n]
+        return graphs
 
 
     def _canonical_signature(self, g: ig.Graph) -> tuple:
@@ -220,6 +261,9 @@ class EPMBigraphEnumerator:
         A_indices = list(range(n_q, n_q + n_a))
         R_indices = list(range(n_q + n_a, total_vertices))
         # Tag each node with the exact colors/categories/shortname in node order: Q, then A, then R
+        self.node_ids = list(range(total_vertices))
+        self.node_names = [f"S_{i}" for i in range(n_q)] + [f"A_{j}" for j in range(n_a)] + [f"{k}" for k in range(n_r)]
+        self.node_bipartites = [0] * (n_q + n_a) + [1] * n_r
         self.node_colors = [0] * n_q + [1] * n_a + [2] * n_r
         self.node_types = ['Q'] * n_q + ['A'] * n_a + ['R'] * n_r
         self.node_categories = ["system_nodes"] * n_q + ["ancilla_nodes"] * n_a + ["sculpting_nodes"] * n_r
@@ -263,7 +307,7 @@ class EPMBigraphEnumerator:
                 yield g
 
 
-    def enumerate_structural(self, n_q: int, n_a: int) -> dict[tuple, ig.Graph]:
+    def enumerate_structural(self, n_q: int, n_a: int, attributes: list[str]=[]) -> dict[tuple, ig.Graph]:
         """
         Enumerate unique non-trivial EPM bipartite graphs for given (n_q, n_a).
 
@@ -286,25 +330,29 @@ class EPMBigraphEnumerator:
             A dictionary mapping canonical signatures to unique undirected bipartite graphs,
             optionally filtered by SCC constraint if strongly_connected_only is True.
         """
-        reps = {}
+        self.method = "enumerate_structural"
+        self.n_q = n_q
+        self.n_a = n_a
+        self.Gs = {}
         for g in self._generate_all_EPM_bigraphs(n_q, n_a):
             sig = self._canonical_signature(g)
-            if sig not in reps:
-                reps[sig] = g
+            if sig not in self.Gs:
+                self.Gs[sig] = g
 
         if not self.strongly_connected_only:
-            return reps
+            return self.Gs
 
-        final_reps = {}
-        for sig, g in reps.items():
+        final_Gs = {}
+        for sig, g in self.Gs.items():
             g2 = g.copy()
             g2.vs['category'] = self.node_categories
             g2.es['weight'] = [1] * g2.ecount()
             D = EPM_digraph_from_EPM_bipartite_graph_igraph(g2)
             if D.is_connected(mode="STRONG"):
-                final_reps[sig] = g
+                final_Gs[sig] = g
 
-        return final_reps
+        self.Gs = final_Gs
+        return self.Gs
 
 
     def enumerate_colored(self, n_q: int, n_a: int) -> dict[tuple, ig.Graph]:
