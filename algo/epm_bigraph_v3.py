@@ -150,58 +150,153 @@ def EPM_digraph_from_EPM_bipartite_graph_igraph(B: ig.Graph) -> ig.Graph:
 
 
 class EPMBigraphEnumerator:
-    """Enumerator for unique nontrivial EPM bigraphs."""
+    """
+    Enumerator for non-trivial Extended Projective Measurement (EPM) bipartite graphs.
 
-    def __init__(self, R_min: int = 2):
+    This class generates undirected bipartite graphs with the following properties:
+      • The vertex set is partitioned into qubit (Q), ancilla (A), and right-side (R) nodes.
+      • Each Q node is connected to exactly 2 R nodes.
+      • Each A node is connected to ≥2 R nodes.
+      • Each R node must be connected to ≥ R_min neighbors (default: 2).
+      • Graphs are filtered up to color-preserving isomorphism using canonical labeling.
+      • Optionally, only graphs whose derived directed EPM graph is strongly connected
+        are retained (controlled by `strongly_connected_only`).
+
+    The resulting graphs are useful in quantum information contexts such as
+    optical graph states, measurement-based quantum computation (MBQC), and
+    variational architectures where the structure of bipartite entanglement is critical.
+
+    Parameters
+    ----------
+    R_min : int, default=2
+        The minimum degree required for each R node in the bipartite graph.
+        This ensures non-trivial coupling from Q and A nodes.
+
+    strongly_connected_only : bool, default=True
+        If True, filters the output to only include graphs whose corresponding
+        directed EPM graph (as defined by EPM_digraph_from_EPM_bipartite_graph_igraph)
+        forms a single strongly connected component (SCC).
+        This reflects full causal or information-theoretic interdependence in
+        the system and is often used as a physical constraint.
+
+    Attributes
+    ----------
+    node_colors : list[int]
+        Color labels for vertices used in canonical isomorphism detection.
+        Q = 0, A = 1, R = 2
+
+    node_types : list[str]
+        Short type labels for vertices: "Q", "A", or "R"
+
+    node_categories : list[str]
+        Full category labels matching what is required by the digraph converter:
+        "system_nodes", "ancilla_nodes", and "sculpting_nodes"
+
+    Methods
+    -------
+    enumerate(n_q: int, n_a: int) -> list[igraph.Graph]
+        Returns a list of unique, non-trivial EPM bipartite graphs for the
+        given number of qubits and ancillae, optionally filtered by SCC constraint.
+    """
+
+    def __init__(self, R_min: int = 2, strongly_connected_only: bool = True):
         """
-        R_min: minimum degree required on each right-side node
+        Parameters
+        ----------
+        R_min : int, default=2
+            Minimum degree required on each right-side node (R node, sculpting nodes).
+            This ensures that each generated EPM bipartite graph is non-trivial on the R-side.
+
+        strongly_connected_only : bool, default=True
+            Whether to filter the output to include only graphs whose derived
+            directed EPM digraph is a single strongly connected component (SCC).
+            When True, each returned graph satisfies the SCC condition after
+            conversion via EPM_digraph_from_EPM_bipartite_graph_igraph().
         """
         self.R_min = R_min
+        self.strongly_connected_only = strongly_connected_only
+        self.node_colors = None     # colors/types/categories are the same thing, for different purpose
+        self.node_types = None
         self.node_categories = None
-        self.short_categories = None
 
-    # ----------------------------------------------------------------------- #
-    #  Helper ­- Canonical signature using igraph canonical_permutation
-    # ----------------------------------------------------------------------- #
+
     def _canonical_signature(self, g: ig.Graph) -> tuple:
-        # Compute canonical permutation
-        perm = g.canonical_permutation(color=self.node_colors)
-        # Permute to canonical form
-        gc = g.permute_vertices(perm)
-        # Build a signature from sorted edge list
-        edges = sorted(gc.get_edgelist())
-        return tuple(edges)     # This can be used as the key for the unique canonical representation of all isomorphic graph
+        """
+        Computes a canonical signature for a graph based on vertex color and
+        sorted edge structure. Used to identify unique graphs up to 
+        color-preserving isomorphism.
 
-    # ----------------------------------------------------------------------- #
-    #  Generator for *all* non-trivial EPM graphs (no iso-filtering)
-    # ----------------------------------------------------------------------- #
-    def _generate_all_nontrivial_EPM_bigraphs(self, n_q: int, n_a: int):
-        R_size = n_q + n_a
-        # Node index halves:
-        # 0..n_q-1        : Q vertices
-        # n_q..n_q+n_a-1  : A vertices
-        # n_q+n_a..n_q+n_a+R_size-1 : R vertices
-        total_vertices = n_q + n_a + R_size
+        Parameters
+        ----------
+        g : igraph.Graph
+            The input undirected EPM bipartite graph.
+
+        Returns
+        -------
+        tuple
+            A tuple of sorted edges in the canonical vertex order, used as a
+            hashable key to detect isomorphic graphs.
+        """
+        # Compute canonical permutation using vertex colors
+        perm = g.canonical_permutation(color=self.node_colors)
+        # Apply permutation to normalize vertex order
+        gc = g.permute_vertices(perm)
+        # Create a signature from the sorted edge list
+        edges = sorted(gc.get_edgelist())
+        return tuple(edges)
+
+
+    def _generate_all_EPM_bigraphs(self, n_q: int, n_a: int):
+        """
+        Generator for all EPM bipartite graphs.
+
+        Each graph has:
+        - n_q “qubit” nodes of degree exactly 2
+        - n_a “ancilla” nodes of degree >= 2
+        - n_r = n_q + n_a “R” nodes, each with degree >= self.R_min
+
+        Nodes are ordered:
+        0..n_q-1           : qubit nodes
+        n_q..n_q+n_a-1     : ancilla nodes
+        n_q+n_a..n_q+n_a+n_r-1 : R nodes
+
+        Parameters
+        ----------
+        n_q : int
+            Number of qubit (Q) vertices, each connects to exactly two R nodes.
+        n_a : int
+            Number of ancilla (A) vertices, each connects to at least two R nodes.
+
+        Yields
+        ------
+        igraph.Graph
+            An undirected bipartite graph with the above degree constraints, but
+            without isomorphism filtering or SCC filtering.
+        """
+        
+        n_r = n_q + n_a     # total # of R-side nodes
+        total_vertices = n_q + n_a + n_r    # total vertices = Q + A + R
+        # index ranges for each part
         Q_indices = list(range(n_q))
         A_indices = list(range(n_q, n_q + n_a))
         R_indices = list(range(n_q + n_a, total_vertices))
-        # tag each node with the exact colors/categories/shortname in node order: Q, then A, then R
-        self.node_colors = [0] * n_q + [1] * n_a + [2] * R_size
-        self.node_types = ['Q'] * n_q + ['A'] * n_a + ['R'] * R_size
-        self.node_categories = ["system_nodes"] * n_q + ["ancilla_nodes"] * n_a + ["sculpting_nodes"] * R_size
+        # Tag each node with the exact colors/categories/shortname in node order: Q, then A, then R
+        self.node_colors = [0] * n_q + [1] * n_a + [2] * n_r
+        self.node_types = ['Q'] * n_q + ['A'] * n_a + ['R'] * n_r
+        self.node_categories = ["system_nodes"] * n_q + ["ancilla_nodes"] * n_a + ["sculpting_nodes"] * n_r
 
-        # Precompute neighbor options on the right, the edges are treated as uncolored/unweighted
+        # Precompute neighbor options on the right, the edges are treated as unweighted
         two_subsets = list(combinations(R_indices, 2))
-        aux_subsets = [
+        ancilla_subsets = [
             comb
-            for d in range(2, R_size + 1)
+            for d in range(2, n_r + 1)
             for comb in combinations(R_indices, d)
-        ]  # Edge number >=2 for auxiliaries
+        ]  # Number of edge (or neighbors) >= 2 for ancilla nodes
 
-        # Enumerate choices
+        # Enumerate every choice of R‐neighbors for Q and A nodes
         for Q_choice in product(two_subsets, repeat=n_q):
-            for A_choice in product(aux_subsets, repeat=n_a):
-                # Degree counter for right nodes
+            for A_choice in product(ancilla_subsets, repeat=n_a):
+                # count degrees on R‐side
                 deg_R = {r: 0 for r in R_indices}
                 for qnbrs in Q_choice:
                     for r in qnbrs:
@@ -209,11 +304,11 @@ class EPMBigraphEnumerator:
                 for anbrs in A_choice:
                     for r in anbrs:
                         deg_R[r] += 1
-                # non-triviality: every right node must have >=R_min edge
+                # non-triviality: every right node must have >= R_min edge, otherwise, skip
                 if any(deg < self.R_min for deg in deg_R.values()):
                     continue
 
-                # build the full igraph Graph
+                # build the igraph object
                 g = ig.Graph(n=total_vertices, directed=False)
 
                 edges = []
@@ -221,40 +316,56 @@ class EPMBigraphEnumerator:
                 for i, qnbrs in enumerate(Q_choice):
                     for r in qnbrs:
                         edges.append((i, r))
-                # auxiliary edges
+                # ancilla edges
                 for j, anbrs in enumerate(A_choice, start=n_q):
                     for r in anbrs:
                         edges.append((j, r))
                 g.add_edges(edges)
                 yield g
 
-    # ----------------------------------------------------------------------- #
-    #  Public API
-    # ----------------------------------------------------------------------- #
-    def enumerate(self, n_q: int, n_a: int):
+
+    def enumerate(self, n_q: int, n_a: int) -> dict[tuple, ig.Graph]:
         """
-        Returns one representative per colour-preserving isomorphism class
-        whose corresponding directed EPM graph is strongly connected, with degree of all R nodes >=2.
+        Enumerate unique non-trivial EPM bipartite graphs for given (n_q, n_a).
+
+        This function:
+        * Generates all non-trivial EPM graphs using _generate_all_nontrivial_EPM_bigraphs().
+        * Deduplicates them up to color-preserving isomorphism using canonical signatures.
+        * Optionally filters to retain only those graphs whose corresponding
+            directed EPM graph is a single strongly connected component.
+
+        Parameters
+        ----------
+        n_q : int
+            Number of qubit (Q) vertices. Each Q node connects to exactly two R nodes.
+        n_a : int
+            Number of ancilla (A) vertices. Each A node connects to at least two R nodes.
+
+        Returns
+        -------
+        dict[tuple, igraph.Graph]
+            A dictionary mapping canonical signatures to unique undirected bipartite graphs,
+            optionally filtered by SCC constraint if strongly_connected_only is True.
         """
         reps = {}
-        for g in self._generate_all_nontrivial_EPM_bigraphs(n_q, n_a):
+        for g in self._generate_all_EPM_bigraphs(n_q, n_a):
             sig = self._canonical_signature(g)
             if sig not in reps:
                 reps[sig] = g
 
-        # Filter to only those whose digraph has exactly one strongly connected component
+        if not self.strongly_connected_only:
+            return reps
+
         final_reps = {}
         for sig, g in reps.items():
             g2 = g.copy()
             g2.vs['category'] = self.node_categories
-            # give every edge a weight attribute so get_adjacency("weight") works
             g2.es['weight'] = [1] * g2.ecount()
-            # now convert and test strong connectivity
             D = EPM_digraph_from_EPM_bipartite_graph_igraph(g2)
             if D.is_connected(mode="STRONG"):
                 final_reps[sig] = g
 
-        return list(final_reps.values())
+        return final_reps
 
 
 # --------------------------------------------------------------------------- #
