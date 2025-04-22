@@ -28,13 +28,14 @@ def profile_epm(n_q, n_a):
 
 if __name__ == "__main__":
     # Example usage
+    profile_epm(1, 3)
     profile_epm(2, 1)
-    profile_epm(3, 1)
-    profile_epm(4, 1)
-    profile_epm(3, 2)
     profile_epm(2, 2)
+    profile_epm(3, 1)
+    profile_epm(3, 2)
+    profile_epm(4, 1)
     # profile_epm(2, 0)
     # profile_epm(3, 0)
     # profile_epm(4, 0)
     # profile_epm(5, 0)
-    # profile_epm(5, 2)   # uncomment only if you're confident in memory
+    # profile_epm(5, 2)

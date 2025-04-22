@@ -2,7 +2,7 @@ import tracemalloc
 import time
 import psutil
 import os
-from epm_bigraph_v3 import EPMBigraphEnumerator
+from epm_bigraph_v4 import EPMBigraphEnumerator
 
 def profile_epm(n_q, n_a):
     print(f"Profiling (n_q={n_q}, n_a={n_a})")
@@ -37,8 +37,12 @@ if __name__ == "__main__":
     profile_epm(3, 1)
     profile_epm(3, 2)
     profile_epm(4, 1)
+    
+    profile_epm(5, 1)
+    profile_epm(2, 3)
+    profile_epm(4, 2)
     # profile_epm(2, 0)
     # profile_epm(3, 0)
     # profile_epm(4, 0)
     # profile_epm(5, 0)
-    # profile_epm(5, 2)
+    # profile_epm(6, 0)
