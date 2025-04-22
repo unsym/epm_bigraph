@@ -40,13 +40,13 @@ def _canonical_signature(g: Graph) -> str:
     gc = g.permute_vertices(perm)
     # Build a signature from sorted edge list
     edges = sorted(gc.get_edgelist())
-    return repr(edges)
+    return tuple(edges)
 
 
 # --------------------------------------------------------------------------- #
 #  Generator for *all* non-trivial EPM graphs (no iso-filtering)
 # --------------------------------------------------------------------------- #
-def _generate_all_nontrivial_EPM_bigraphs(n_q: int, n_a: int):
+def _generate_all_nontrivial_EPM_bigraphs(n_q: int, n_a: int, R_min: int=2):
     R_size = n_q + n_a
     # Node index halves:
     # 0..n_q-1        : Q vertices
@@ -68,7 +68,7 @@ def _generate_all_nontrivial_EPM_bigraphs(n_q: int, n_a: int):
     # Enumerate choices
     for Q_choice in product(two_subsets, repeat=n_q):
         for A_choice in product(aux_subsets, repeat=n_a):
-            # Degree counter for right vertices
+            # Degree counter for right nodes
             deg_R = {r: 0 for r in R_indices}
             for qnbrs in Q_choice:
                 for r in qnbrs:
@@ -76,8 +76,8 @@ def _generate_all_nontrivial_EPM_bigraphs(n_q: int, n_a: int):
             for anbrs in A_choice:
                 for r in anbrs:
                     deg_R[r] += 1
-            # non-triviality: every right vertex must have >=1 edge
-            if any(deg == 0 for deg in deg_R.values()):
+            # non-triviality: every right node must have >=R_min edge
+            if any(deg < R_min for deg in deg_R.values()):
                 continue
 
             # build the full igraph Graph
