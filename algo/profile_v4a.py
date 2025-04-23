@@ -3,9 +3,20 @@ import time
 import psutil
 import os
 from epm_bigraph_v4 import EPMBigraphEnumerator
+from math import comb
 
-def profile_epm(n_q, n_a):
-    print(f"Profiling (n_q={n_q}, n_a={n_a})")
+
+def count_symmetry_reduced_candidates(n_q: int, n_a: int) -> int:
+    R = n_q + n_a
+    M_q_types = comb(R, 2)
+    count_q = comb(M_q_types + n_q - 1, n_q)
+    M_a_types = 2**R - R - 1
+    count_a = comb(M_a_types + n_a - 1, n_a) if n_a > 0 else 1
+    return count_q * count_a
+
+
+def profile_epm(n_q, n_a, cur=None, total=None):
+    print(f"Profiling #{cur}/{total} (n_q={n_q}, n_a={n_a})")
 
     # Start memory tracking
     tracemalloc.start()
@@ -31,18 +42,16 @@ def profile_epm(n_q, n_a):
     print("")
 
 if __name__ == "__main__":
-    # Example usage
-    profile_epm(2, 1)
-    profile_epm(2, 2)
-    profile_epm(3, 1)
-    profile_epm(3, 2)
-    profile_epm(4, 1)
-    
-    profile_epm(5, 1)
-    profile_epm(2, 3)
-    profile_epm(4, 2)
-    # profile_epm(2, 0)
-    # profile_epm(3, 0)
-    # profile_epm(4, 0)
-    # profile_epm(5, 0)
-    # profile_epm(6, 0)
+    count_threshold = 10**8
+    pairs_with_counts = []
+    for n_q in range(2, 9):
+        for n_a in range(0, 6):
+            count = count_symmetry_reduced_candidates(n_q, n_a)
+            if count < count_threshold:
+                pairs_with_counts.append(((n_q, n_a), count))
+
+    total = len(pairs_with_counts)
+    pairs_with_counts.sort(key=lambda x: x[1])
+    for (i, ((n_q, n_a), count)) in enumerate(pairs_with_counts):
+        profile_epm(n_q, n_a, i, total)
+        

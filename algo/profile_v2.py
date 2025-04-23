@@ -28,7 +28,6 @@ def profile_epm(n_q, n_a):
 
 if __name__ == "__main__":
     # Example usage
-    profile_epm(1, 3)
     profile_epm(2, 1)
     profile_epm(2, 2)
     profile_epm(3, 1)

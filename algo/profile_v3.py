@@ -22,16 +22,16 @@ def profile_epm(n_q, n_a):
     peak_mem_mb = peak / 1024 / 1024
     tracemalloc.stop()
 
-    print(f"  → Time elapsed:     {t1 - t0:.3f} sec")
-    print(f"  → Peak memory:      {peak_mem_mb:.2f} MB")
-    print(f"  → Unique graphs:    {len(graphs)}")
-    print(f"  → EPM graphs eval:  {enumerator.num_epm_bigraph_enumerated}")
-    print(f"  → Unique ratio:     {len(graphs)/enumerator.num_epm_bigraph_enumerated}")
+    print(f"  → Time elapsed:       {t1 - t0:.3f} sec")
+    print(f"  → Peak memory:        {peak_mem_mb:.2f} MB")
+    print(f"  → Eval ratio:         {len(graphs)/enumerator.num_epm_bigraph_enumerated:.3g}")
+    print(f"  → EPM graphs eval:    {enumerator.num_epm_bigraph_enumerated}")
+    print(f"  → Canonical graphs:   {enumerator.num_epm_bigraph_canonical}")
+    print(f"  → Nontrivial graphs:  {len(graphs)}")
     print("")
 
 if __name__ == "__main__":
     # Example usage
-    profile_epm(1, 3)
     profile_epm(2, 1)
     profile_epm(2, 2)
     profile_epm(3, 1)
