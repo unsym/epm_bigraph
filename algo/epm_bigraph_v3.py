@@ -189,7 +189,8 @@ class EPMBigraphEnumerator:
         self.n_q = None
         self.n_a = None
         self.Gs = None
-        self.num_epm_bigraph_enumerated = 0
+        self.num_epm_bigraph_canonical = 0      # Number of unique EPM bigraph with canonical signature before SCC filtering
+        self.num_epm_bigraph_enumerated = 0     # Number of EPM bigraph returned for the test of canonical signature
 
 
     def _attach_node_metadata(self, graphs: list[ig.Graph], attributes: list[str]) -> list[ig.Graph]:
@@ -261,13 +262,6 @@ class EPMBigraphEnumerator:
         Q_indices = list(range(n_q))
         A_indices = list(range(n_q, n_q + n_a))
         R_indices = list(range(n_q + n_a, total_vertices))
-        # Tag each node with the exact colors/categories/shortname in node order: Q, then A, then R
-        self.node_ids = list(range(total_vertices))
-        self.node_names = [f"S_{i}" for i in range(n_q)] + [f"A_{j}" for j in range(n_a)] + [f"{k}" for k in range(n_r)]
-        self.node_bipartites = [0] * (n_q + n_a) + [1] * n_r
-        self.node_colors = [0] * n_q + [1] * n_a + [2] * n_r
-        self.node_types = ['Q'] * n_q + ['A'] * n_a + ['R'] * n_r
-        self.node_categories = ["system_nodes"] * n_q + ["ancilla_nodes"] * n_a + ["sculpting_nodes"] * n_r
 
         # Precompute neighbor options on the right, the edges are treated as unweighted
         two_subsets = list(combinations(R_indices, 2))
@@ -278,7 +272,6 @@ class EPMBigraphEnumerator:
         ]  # Number of edge (or neighbors) >= 2 for ancilla nodes
 
         # Enumerate every choice of R‐neighbors for Q and A nodes
-        self.num_epm_bigraph_enumerated = 0
         for Q_choice in product(two_subsets, repeat=n_q):
             for A_choice in product(ancilla_subsets, repeat=n_a):
                 # count degrees on R‐side
@@ -306,7 +299,6 @@ class EPMBigraphEnumerator:
                     for r in anbrs:
                         edges.append((j, r))
                 g.add_edges(edges)
-                self.num_epm_bigraph_enumerated += 1
                 yield g
 
 
@@ -336,11 +328,24 @@ class EPMBigraphEnumerator:
         self.method = "enumerate_structural"
         self.n_q = n_q
         self.n_a = n_a
+        self.n_r = n_q + n_a     # total # of R-side nodes
+        self.n_total = n_q + n_a + self.n_r    # total vertices = Q + A + R
+        # Tag each node with the exact colors/categories/shortname in node order: Q, then A, then R
+        self.node_ids = list(range(self.n_total))
+        self.node_names = [f"S_{i}" for i in range(n_q)] + [f"A_{j}" for j in range(n_a)] + [f"{k}" for k in range(self.n_r)]
+        self.node_bipartites = [0] * (n_q + n_a) + [1] * self.n_r
+        self.node_colors = [0] * n_q + [1] * n_a + [2] * self.n_r
+        self.node_types = ['Q'] * n_q + ['A'] * n_a + ['R'] * self.n_r
+        self.node_categories = ["system_nodes"] * n_q + ["ancilla_nodes"] * n_a + ["sculpting_nodes"] * self.n_r
+        self.num_epm_bigraph_enumerated = 0
+
         self.Gs = {}
         for g in self._generate_all_EPM_bigraphs(n_q, n_a):
+            self.num_epm_bigraph_enumerated += 1
             sig = self._canonical_signature(g)
             if sig not in self.Gs:
                 self.Gs[sig] = g
+        self.num_epm_bigraph_canonical = len(self.Gs)
 
         if not self.strongly_connected_only:
             return self.Gs
