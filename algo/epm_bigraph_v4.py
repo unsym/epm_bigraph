@@ -189,8 +189,9 @@ class EPMBigraphEnumerator:
         self.n_q = None
         self.n_a = None
         self.Gs = None
-        self.num_epm_bigraph_canonical = 0      # Number of unique EPM bigraph with canonical signature before SCC filtering
         self.num_epm_bigraph_enumerated = 0     # Number of EPM bigraph returned for the test of canonical signature
+        self.num_epm_bigraph_canonical = 0      # Number of unique EPM bigraph with canonical signature before SCC filtering
+        self.num_epm_bigraph_canonical_nontrivial = 0   # Number of unique EPM bigraph with canonical signature after SCC filtering
 
 
     def _attach_node_metadata(self, graphs: list[ig.Graph], attributes: list[str]) -> list[ig.Graph]:
@@ -211,6 +212,8 @@ class EPMBigraphEnumerator:
         list[igraph.Graph]
             The same list of graphs with node attributes attached.
         """
+        if not attributes:
+            return graphs
         for g in graphs:
             n = g.vcount()
             if "id" in attributes:
@@ -226,6 +229,48 @@ class EPMBigraphEnumerator:
             if "color" in attributes:
                 g.vs["color"] = self.node_colors[:n]
         return graphs
+
+
+    def _bigraph_to_digraph(self, B: ig.Graph, n_q: int, n_a: int) -> ig.Graph:
+        """
+        Converts an EPM bipartite graph B into a directed graph D over Q ∪ A nodes.
+        
+        Parameters
+        ----------
+        B : igraph.Graph
+            Undirected bipartite graph with vertices ordered as:
+            [0 .. n_q-1]: Q (system), [n_q .. n_q+n_a-1]: A (ancilla), [n_q+n_a .. end]: R (sculpting)
+
+        n_q : int
+            Number of Q (system) nodes.
+
+        n_a : int
+            Number of A (ancilla) nodes.
+
+        Returns
+        -------
+        igraph.Graph
+            Directed graph D with Q ∪ A nodes (n_q + n_a total).
+            For each R-node connected to ≥2 Q/A nodes, creates bidirectional edges among them.
+        """
+        # Now it consistent give the digraph SCC, different from EPM_digraph_from_EPM_bipartite_graph_igraph().
+        n_r = n_q + n_a
+        D = ig.Graph(n=n_r, directed=True)
+
+        # For each R-node
+        for r in range(n_q + n_a, n_q + n_a + n_r):
+            # Get neighbors of r in the bipartite graph
+            neighbors = B.neighbors(r)
+            # Filter to only include Q or A nodes
+            qa_neighbors = [v for v in neighbors if v < n_r]
+
+            # If R connects to multiple Q/A nodes, add directed edges among them
+            for i in range(len(qa_neighbors)):
+                for j in range(len(qa_neighbors)):
+                    if i != j:
+                        D.add_edge(qa_neighbors[i], qa_neighbors[j])
+
+        return D
 
 
     def _canonical_signature(self, g: ig.Graph) -> tuple:
@@ -356,16 +401,65 @@ class EPMBigraphEnumerator:
             g2.vs['category'] = self.node_categories
             g2.es['weight'] = [1] * g2.ecount()
             D = EPM_digraph_from_EPM_bipartite_graph_igraph(g2)
+            # D = self._bigraph_to_digraph(g2, n_q, n_a)
             if D.is_connected(mode="STRONG"):
                 final_Gs[sig] = g
 
         self.Gs = final_Gs
-        return self.Gs
+        self.num_epm_bigraph_canonical_nontrivial = len(self.Gs)
+        return self._attach_node_metadata(self.Gs, attributes)
 
 
-    def enumerate_colored(self, n_q: int, n_a: int) -> dict[tuple, ig.Graph]:
-        """ TODO: implement the enumeration with colored/weighted edges """
-        pass
+    def enumerate_colored(self, n_q: int, n_a: int, attributes: list[str] = []) -> dict[tuple, list[ig.Graph]]:
+        """ Return the enumeration with colored/weighted edges 
+        For each unweighted canonical EPM bigraph:
+          * generate all 2**n_q ways to assign weights (1,2)/(2,1) on its Q-edges
+            and weight=3 on all A-edges,
+          * dedupe *within* that group using VF2 up to weight-preserving iso,
+          * attach optional node metadata,
+        and return a map: unweighted_signature -> [weighted_graphs...].
+        """
+        struct_map = self.enumerate_structural(n_q, n_a, attributes=[])
+        
+        colored_map: dict[tuple, list[ig.Graph]] = {}
+        for sig, g_struct in struct_map.items():
+            # Precompute each Q-node’s two edge-IDs
+            q_edges: list[tuple[int,int]] = []
+            for q in range(self.n_q):
+                # neighbors in R only:
+                rs = sorted(v for v in g_struct.neighbors(q) if v >= self.n_r)
+                e1 = g_struct.get_eid(q, rs[0])
+                e2 = g_struct.get_eid(q, rs[1])
+                q_edges.append((e1, e2))
+
+            base_ecount = g_struct.ecount()
+            variants: list[ig.Graph] = []
+            # Enumerate all 2^n_q weight assignments, assign (1,2)/(2,1) to each Q-edge pair
+            for mask in range(1 << self.n_q):
+                g_w = g_struct.copy()
+                weights = [3] * base_ecount     # assign default weight=3 to every edge
+                for q, (e1, e2) in enumerate(q_edges):
+                    if (mask >> q) & 1:
+                        weights[e1], weights[e2] = 2, 1
+                    else:
+                        weights[e1], weights[e2] = 1, 2
+                g_w.es["weight"] = weights
+
+                # Deduplicate *within* this structural group
+                is_new = True
+                for g_prev in variants:
+                    if g_w.isomorphic_vf2(g_prev, edge_color1=g_w.es["weight"], edge_color2=g_prev.es["weight"]):
+                        is_new = False
+                        break
+                if is_new:
+                    variants.append(g_w)
+
+            if attributes:
+                self._attach_node_metadata(variants, attributes)
+            colored_map[sig] = variants
+        return colored_map
+
+
 
 
 # --------------------------------------------------------------------------- #
@@ -376,6 +470,13 @@ if __name__ == "__main__":
     n_q, n_a = 3, 2
     demo_graphs = enumerator.enumerate_structural(n_q, n_a)
     print(f"n_q={n_q}, n_a={n_a}  →  found {len(demo_graphs)} unique non-trivial EPM bigraphs")
+    # print(sum([len(v)  for k,v in demo_graphs.items()]))
+    # print([len(v)  for k,v in demo_graphs.items()])
+    # for k,v in demo_graphs.items():
+    #     #print(v)
+    #     #print(len(v))
+    #     for g in v: 
+    #         print(list(zip(g.get_edgelist(), g.es["weight"])))
     for (idx,(h, g)) in enumerate(demo_graphs.items()):
         #print(f"Graph {idx}: types={g.vs['type']}")
         print(f"Graph {idx}")
